@@ -535,6 +535,8 @@ export function PresentationGenerationManager() {
                 prompt: presentationInput,
                 numberOfCards: numSlides,
                 language,
+                modelProvider,
+                modelId,
               },
             },
           );

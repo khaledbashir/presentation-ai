@@ -1,4 +1,5 @@
 import { modelPicker } from "@/lib/model-picker";
+export const dynamic = "force-dynamic";
 import { auth } from "@/server/auth";
 import { streamText } from "ai";
 import { NextResponse } from "next/server";
@@ -115,7 +116,12 @@ export async function POST(req: Request) {
 
     // Check if provider/model supports tool calling well
     // Some providers and specific models have issues with tool calling
-    const incompatibleModel = modelId?.includes("minimax") || modelId?.includes("pollinations");
+    const incompatibleModel =
+      modelId?.includes("minimax") ||
+      modelId?.includes("pollinations") ||
+      // Many OpenRouter "gpt-oss" variants and "exacto" models don't support tools reliably
+      modelId?.includes("gpt-oss") ||
+      modelId?.includes(":exacto");
     const incompatibleProvider = ["pollinations"].includes(modelProvider || "");
     const supportsTools = !incompatibleProvider && !incompatibleModel;
 
@@ -160,14 +166,15 @@ export async function POST(req: Request) {
       streamConfig.toolChoice = "auto";
     }
 
-    const result = streamText(streamConfig);
+  const result = streamText(streamConfig);
 
     console.log("✅ Outline with search streaming started");
     return result.toDataStreamResponse();
   } catch (error) {
-    console.error("Error in outline generation with search:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Error in outline generation with search:", message);
     return NextResponse.json(
-      { error: "Failed to generate outline with search" },
+      { error: "Failed to generate outline with search", details: message },
       { status: 500 },
     );
   }

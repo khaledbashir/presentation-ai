@@ -1,4 +1,5 @@
 import { modelPicker } from "@/lib/model-picker";
+export const dynamic = "force-dynamic";
 import { auth } from "@/server/auth";
 import { streamText } from "ai";
 import { NextResponse } from "next/server";
@@ -113,9 +114,10 @@ export async function POST(req: Request) {
     console.log("✅ Outline generation streaming started");
     return result.toDataStreamResponse();
   } catch (error) {
-    console.error("Error in outline generation:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Error in outline generation:", message);
     return NextResponse.json(
-      { error: "Failed to generate outline" },
+      { error: "Failed to generate outline", details: message },
       { status: 500 },
     );
   }

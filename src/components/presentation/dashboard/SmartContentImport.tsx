@@ -1,6 +1,6 @@
 "use client";
 
-import { extractContentFromUrl, processImportedContent } from "@/app/_actions/content-import/contentImportActions";
+import { processImportedContent } from "@/app/_actions/content-import/contentImportActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,15 +22,24 @@ export function SmartContentImport() {
 
     setIsImporting(true);
     try {
-      const result = await extractContentFromUrl(url);
+      const res = await fetch("/api/content/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const result = await res.json();
 
-      if (result.success) {
-        const processedContent = await processImportedContent(result.content || '', result.title || 'Imported Content');
+      if (res.ok && result.success) {
+        const processedContent = await processImportedContent(
+          result.content || "",
+          result.title || "Imported Content",
+        );
         setPresentationInput(processedContent);
         toast.success(`Content imported from "${result.title}"`);
         setUrl("");
       } else {
-        toast.error(result.error || "Failed to extract content from URL");
+        const msg = result?.error || "Failed to extract content from URL";
+        toast.error(msg);
       }
     } catch (error) {
       toast.error("Failed to process URL");
