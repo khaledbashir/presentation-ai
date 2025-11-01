@@ -1,4 +1,5 @@
 import { modelPicker } from "@/lib/model-picker";
+import { QUICK_ENHANCEMENTS } from "@/app/_actions/image/prompt-enhancer";
 export const dynamic = "force-dynamic";
 import { auth } from "@/server/auth";
 import { streamText } from "ai";
@@ -146,11 +147,19 @@ Choose ONE different layout for each slide (use these exact XML tags so our pars
 9. IMAGES: Most slides needs at least one
 \`\`\`xml
 <!-- Good image queries (detailed, specific): -->
-<IMG query="futuristic smart city with renewable energy infrastructure and autonomous vehicles in morning light" />
-<IMG query="close-up of microchip with circuit board patterns in blue and gold tones" />
-<IMG query="diverse team of professionals collaborating in modern office with data visualizations" />
+<IMG query="futuristic smart city with renewable energy infrastructure and autonomous vehicles in morning light, professional business setting, high quality, 16:9 aspect ratio" />
+<IMG query="close-up of microchip with circuit board patterns in blue and gold tones, photorealistic detail, sharp focus, professional lighting" />
+<IMG query="diverse team of professionals collaborating in modern office with data visualizations, corporate environment, natural colors, professional business setting" />
 
 <!-- NOT just: "city", "microchip", "team meeting" -->
+<!-- Image Query Requirements: -->
+<!-- - Minimum 10 words for basic quality -->
+<!-- - Include style (professional, photorealistic, artistic, etc.) -->
+<!-- - Add lighting details (professional lighting, dramatic lighting, etc.) -->
+<!-- - Specify quality level (high quality, detailed, sharp focus, etc.) -->
+<!-- - Include setting/context (business setting, corporate environment, etc.) -->
+<!-- - Add color scheme if relevant (natural colors, vibrant, etc.) -->
+<!-- - Consider aspect ratio (16:9 for presentations) -->
 \`\`\`
 
 10. BOXES: For simple information tiles

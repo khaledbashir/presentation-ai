@@ -6,12 +6,21 @@ import { db } from "@/server/db";
 import { UTFile } from "uploadthing/server";
 import { POLLINATIONS_MODELS, type PollinationsModel } from "./models";
 import { env } from "@/env";
+import { enhanceImagePrompt, type EnhancedPrompt } from "./prompt-enhancer";
 
 export type ImageModelList = PollinationsModel["id"];
 
 export async function generateImageAction(
   prompt: string,
   model: ImageModelList = "flux",
+  enhancementOptions?: {
+    style?: 'professional' | 'creative' | 'minimalist' | 'photorealistic' | 'artistic';
+    quality?: 'standard' | 'high' | 'ultra';
+    aspectRatio?: 'landscape' | 'portrait' | 'square';
+    colorScheme?: 'vibrant' | 'monochrome' | 'warm' | 'cool' | 'natural';
+    context?: string;
+    enableEnhancement?: boolean;
+  }
 ) {
   // Get the current session
   const session = await auth();
@@ -22,10 +31,31 @@ export async function generateImageAction(
   }
 
   try {
+    // Enhanced prompt generation (enabled by default for better quality)
+    let finalPrompt = prompt;
+    let enhancedPromptInfo: EnhancedPrompt | null = null;
+    
+    if (enhancementOptions?.enableEnhancement !== false) {
+      console.log(`🎨 Enhancing image prompt: "${prompt}"`);
+      enhancedPromptInfo = enhanceImagePrompt(prompt, {
+        style: enhancementOptions?.style || 'professional',
+        quality: enhancementOptions?.quality || 'high',
+        aspectRatio: enhancementOptions?.aspectRatio || 'landscape',
+        colorScheme: enhancementOptions?.colorScheme || 'natural',
+        context: enhancementOptions?.context,
+        addTechnicalDetails: true
+      });
+      
+      finalPrompt = enhancedPromptInfo.enhanced;
+      console.log(`✨ Enhanced prompt: "${finalPrompt}"`);
+      console.log(`📊 Quality improvement: ${enhancedPromptInfo.original.length} → ${enhancedPromptInfo.enhanced.length} characters`);
+      console.log(`🔧 Enhancements applied: ${enhancedPromptInfo.enhancements.join(', ')}`);
+    }
+
     // Helper: fetch Pollinations image for a specific model
     const tryPollinations = async (modelId: string) => {
       console.log(`Generating image with Pollinations AI using model: ${modelId}`);
-      const encodedPrompt = encodeURIComponent(prompt);
+      const encodedPrompt = encodeURIComponent(finalPrompt);
       const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=768&model=${modelId}`;
       console.log(`Generated image URL: ${imageUrl}`);
 
@@ -90,7 +120,11 @@ export async function generateImageAction(
       const permanentUrl = uploadResult[0].data.ufsUrl;
       console.log(`Uploaded to UploadThing URL: ${permanentUrl}`);
       const generatedImage = await db.generatedImage.create({
-        data: { url: permanentUrl, prompt, userId: session.user.id },
+        data: { 
+          url: permanentUrl, 
+          prompt: finalPrompt,
+          userId: session.user.id,
+        },
       });
       return { ok: true as const, image: generatedImage };
     };
