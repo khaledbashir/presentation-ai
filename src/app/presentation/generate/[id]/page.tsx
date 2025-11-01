@@ -22,7 +22,7 @@ import { ArrowLeft, Wand2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-export const PRESENTATION_GENERATION_COOKIE = "presentation_generation_pending";
+const PRESENTATION_GENERATION_COOKIE = "presentation_generation_pending";
 
 export default function PresentationGenerateWithIdPage() {
   const router = useRouter();
