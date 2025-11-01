@@ -36,7 +36,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Ensure Prisma client is generated during build (postinstall handles it, but safe to re-run)
 RUN pnpm prisma generate || true
-RUN pnpm build
+/* Limit Node memory during build to reduce risk of host OOM on constrained runners
+    and avoid enabling Turbopack from the CLI (we removed `--turbo` from package.json).
+    Adjust the value (2048) to match available memory on your build host. */
+RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm build
 # Create empty public folder if it doesn't exist to avoid copy errors
 RUN mkdir -p public
 
