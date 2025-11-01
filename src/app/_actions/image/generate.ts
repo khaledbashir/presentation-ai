@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { UTFile } from "uploadthing/server";
 import { POLLINATIONS_MODELS, type PollinationsModel } from "./models";
+import { env } from "@/env";
 
 export type ImageModelList = PollinationsModel["id"];
 
@@ -21,124 +22,171 @@ export async function generateImageAction(
   }
 
   try {
-    console.log(`Generating image with Pollinations AI using model: ${model}`);
+    // Helper: fetch Pollinations image for a specific model
+    const tryPollinations = async (modelId: string) => {
+      console.log(`Generating image with Pollinations AI using model: ${modelId}`);
+      const encodedPrompt = encodeURIComponent(prompt);
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=768&model=${modelId}`;
+      console.log(`Generated image URL: ${imageUrl}`);
 
-    // Encode the prompt for URL
-    const encodedPrompt = encodeURIComponent(prompt);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=768&model=${model}`;
+      const maxAttempts = 3;
+      let imageResponse: Response | null = null;
+      let lastError: unknown;
 
-    console.log(`Generated image URL: ${imageUrl}`);
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 45000);
+        try {
+          console.log(`🔄 [${modelId}] Attempt ${attempt}/${maxAttempts}: Fetching image from Pollinations...`);
+          const response = await fetch(imageUrl, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; PresentationAI/1.0)',
+              'Accept': 'image/*',
+              'Cache-Control': 'no-cache',
+            },
+          });
+          clearTimeout(timeoutId);
 
-    // Download the image from Pollinations AI URL with improved error handling
-    const maxAttempts = 3;
-    let imageResponse: Response | null = null;
-    let lastError: unknown;
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'No error body');
+            throw new Error(`Pollinations responded with status ${response.status}: ${errorText.substring(0, 100)}`);
+          }
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.startsWith('image/')) {
+            throw new Error(`Invalid content type: ${contentType}. Expected image/*`);
+          }
+          imageResponse = response;
+          console.log(`✅ [${modelId}] Successfully fetched image on attempt ${attempt}`);
+          break;
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          lastError = fetchError;
+          const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          console.warn(`❌ [${modelId}] Pollinations attempt ${attempt}/${maxAttempts} failed:`, errorMessage);
+          if (attempt < maxAttempts) {
+            const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+            console.log(`⏳ Waiting ${backoffTime}ms before retry...`);
+            await new Promise((resolve) => setTimeout(resolve, backoffTime));
+          }
+        }
+      }
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const controller = new AbortController();
-      // Increase timeout to 45 seconds - Pollinations can be very slow
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      if (!imageResponse) {
+        const errorMessage = lastError instanceof Error ? lastError.message : "Failed to download image from Pollinations AI";
+        console.error(`💥 [${modelId}] All ${maxAttempts} attempts failed:`, errorMessage);
+        return { ok: false as const, error: errorMessage };
+      }
 
+      const imageBlob = await imageResponse.blob();
+      const imageBuffer = await imageBlob.arrayBuffer();
+      const filename = `${prompt.substring(0, 20).replace(/[^a-z0-9]/gi, "_")}_${Date.now()}.png`;
+      const utFile = new UTFile([new Uint8Array(imageBuffer)], filename);
+      const uploadResult = await utapi.uploadFiles([utFile]);
+      if (!uploadResult[0]?.data?.ufsUrl) {
+        console.error("Upload error:", uploadResult[0]?.error);
+        throw new Error("Failed to upload image to UploadThing");
+      }
+      const permanentUrl = uploadResult[0].data.ufsUrl;
+      console.log(`Uploaded to UploadThing URL: ${permanentUrl}`);
+      const generatedImage = await db.generatedImage.create({
+        data: { url: permanentUrl, prompt, userId: session.user.id },
+      });
+      return { ok: true as const, image: generatedImage };
+    };
+
+    // Pollinations fallback chain
+    const preferredChain: ImageModelList[] = Array.from(
+      new Set([
+        model, // user selection first
+        "turbo",
+        "gptimage",
+        "kontext",
+        "flux",
+      ] as ImageModelList[]),
+    );
+
+    for (const m of preferredChain) {
+      const result = await tryPollinations(m);
+      if (result.ok) {
+        return { success: true, image: result.image };
+      }
+      // Try next model in chain
+    }
+
+    // Final fallback: Stability AI SD3 (only if API key present)
+    if (env.STABILITY_API_KEY) {
       try {
-        console.log(`🔄 Attempt ${attempt}/${maxAttempts}: Fetching image from Pollinations...`);
-        
-        const response = await fetch(imageUrl, {
-          signal: controller.signal,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; PresentationAI/1.0)',
-            'Accept': 'image/*',
-            'Cache-Control': 'no-cache',
+        console.log("🛟 Falling back to Stability AI SD3 generation");
+        const form = new FormData();
+        form.append("prompt", prompt);
+        form.append("output_format", "jpeg");
+        // No files field needed per simple text prompt
+
+        const stabilityResponse = await fetch(
+          "https://api.stability.ai/v2beta/stable-image/generate/sd3",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${env.STABILITY_API_KEY}`,
+              Accept: "image/*",
+            },
+            body: form,
           },
-        });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => 'No error body');
-          throw new Error(`Pollinations responded with status ${response.status}: ${errorText.substring(0, 100)}`);
-        }
-
-        // Check if the response actually contains image data
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.startsWith('image/')) {
-          throw new Error(`Invalid content type: ${contentType}. Expected image/*`);
-        }
-
-        imageResponse = response;
-        console.log(`✅ Successfully fetched image on attempt ${attempt}`);
-        break;
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        lastError = fetchError;
-        
-        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
-        console.warn(
-          `❌ Pollinations download attempt ${attempt}/${maxAttempts} failed:`,
-          errorMessage,
         );
 
-        // Exponential backoff between retries
-        if (attempt < maxAttempts) {
-          const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
-          console.log(`⏳ Waiting ${backoffTime}ms before retry...`);
-          await new Promise((resolve) => setTimeout(resolve, backoffTime));
+        if (!stabilityResponse.ok) {
+          let body: string | undefined;
+          try {
+            body = await stabilityResponse.text();
+          } catch {
+            /* noop */
+          }
+          throw new Error(
+            `Stability responded with status ${stabilityResponse.status}${body ? `: ${body.substring(0, 120)}` : ""}`,
+          );
         }
+
+        const contentType = stabilityResponse.headers.get("content-type");
+        if (!contentType || !contentType.startsWith("image/")) {
+          throw new Error(`Invalid content type from Stability: ${contentType}`);
+        }
+
+        const imageBlob = await stabilityResponse.blob();
+        const imageBuffer = await imageBlob.arrayBuffer();
+        const filename = `${prompt.substring(0, 20).replace(/[^a-z0-9]/gi, "_")}_${Date.now()}.jpeg`;
+        const utFile = new UTFile([new Uint8Array(imageBuffer)], filename);
+        const uploadResult = await utapi.uploadFiles([utFile]);
+        if (!uploadResult[0]?.data?.ufsUrl) {
+          console.error("Upload error:", uploadResult[0]?.error);
+          throw new Error("Failed to upload image to UploadThing");
+        }
+        const permanentUrl = uploadResult[0].data.ufsUrl;
+        console.log(`Uploaded to UploadThing URL: ${permanentUrl}`);
+        const generatedImage = await db.generatedImage.create({
+          data: { url: permanentUrl, prompt, userId: session.user.id },
+        });
+        return { success: true, image: generatedImage };
+      } catch (err) {
+        console.error("Stability fallback failed:", err);
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Stability fallback failed",
+        };
       }
     }
 
-    if (!imageResponse) {
-      const errorMessage = lastError instanceof Error
-        ? lastError.message
-        : "Failed to download image from Pollinations AI";
-      
-      console.error(`💥 All ${maxAttempts} attempts failed:`, errorMessage);
-      
-      // Return a graceful error instead of throwing
-      return {
-        success: false,
-        error: `Pollinations AI is temporarily unavailable: ${errorMessage}. Please try again in a moment.`,
-      };
-    }
-
-    const imageBlob = await imageResponse.blob();
-    const imageBuffer = await imageBlob.arrayBuffer();
-
-    // Generate a filename based on the prompt
-    const filename = `${prompt.substring(0, 20).replace(/[^a-z0-9]/gi, "_")}_${Date.now()}.png`;
-
-    // Create a UTFile from the downloaded image
-    const utFile = new UTFile([new Uint8Array(imageBuffer)], filename);
-
-    // Upload to UploadThing
-    const uploadResult = await utapi.uploadFiles([utFile]);
-
-    if (!uploadResult[0]?.data?.ufsUrl) {
-      console.error("Upload error:", uploadResult[0]?.error);
-      throw new Error("Failed to upload image to UploadThing");
-    }
-
-    console.log(uploadResult);
-    const permanentUrl = uploadResult[0].data.ufsUrl;
-    console.log(`Uploaded to UploadThing URL: ${permanentUrl}`);
-
-    // Store in database with the permanent URL
-    const generatedImage = await db.generatedImage.create({
-      data: {
-        url: permanentUrl, // Store the UploadThing URL
-        prompt: prompt,
-        userId: session.user.id,
-      },
-    });
-
+    // If we reached here, all fallbacks failed and no Stability key available
     return {
-      success: true,
-      image: generatedImage,
+      success: false,
+      error:
+        "All image providers are currently unavailable. Add STABILITY_API_KEY to enable a final fallback.",
     };
   } catch (error) {
     console.error("Error generating image:", error);
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : "Failed to generate image",
+      error: error instanceof Error ? error.message : "Failed to generate image",
     };
   }
 }
