@@ -1,5 +1,5 @@
 // Simple test for prompt enhancement system
-const { enhanceImagePrompt, QUICK_ENHANCEMENTS } = require('./app/_actions/image/prompt-enhancer.ts');
+import { enhanceImagePrompt, QUICK_ENHANCEMENTS } from './src/app/_actions/image/prompt-enhancer.js';
 
 console.log('🎨 Testing Image Prompt Enhancement System');
 console.log('========================================\n');

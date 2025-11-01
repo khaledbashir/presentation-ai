@@ -35,11 +35,14 @@
     "**/*.ts",
     "**/*.tsx",
     "**/*.cjs",
-    "**/*.js",
     ".next/types/**/*.ts",
     "src/ai/open-canvas/nodes/rewrite-artifact/index.tsx",
     ".next-dev/types/**/*.ts",
     "src/components/notebook/mindmap/types.tss"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "test-*.js",
+    "test-*.sh"
+  ]
 }
