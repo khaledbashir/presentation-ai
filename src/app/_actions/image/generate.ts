@@ -29,44 +29,58 @@ export async function generateImageAction(
 
     console.log(`Generated image URL: ${imageUrl}`);
 
-    // Download the image from Pollinations AI URL with simple retries
+    // Download the image from Pollinations AI URL with improved error handling
     const maxAttempts = 3;
     let imageResponse: Response | null = null;
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const controller = new AbortController();
-      // Increase timeout to 30 seconds - Pollinations can be slow
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      // Increase timeout to 45 seconds - Pollinations can be very slow
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       try {
+        console.log(`🔄 Attempt ${attempt}/${maxAttempts}: Fetching image from Pollinations...`);
+        
         const response = await fetch(imageUrl, {
           signal: controller.signal,
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; PresentationAI/1.0)',
+            'Accept': 'image/*',
+            'Cache-Control': 'no-cache',
           },
         });
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          throw new Error(`Pollinations responded with status ${response.status}`);
+          const errorText = await response.text().catch(() => 'No error body');
+          throw new Error(`Pollinations responded with status ${response.status}: ${errorText.substring(0, 100)}`);
+        }
+
+        // Check if the response actually contains image data
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.startsWith('image/')) {
+          throw new Error(`Invalid content type: ${contentType}. Expected image/*`);
         }
 
         imageResponse = response;
+        console.log(`✅ Successfully fetched image on attempt ${attempt}`);
         break;
       } catch (fetchError) {
         clearTimeout(timeoutId);
         lastError = fetchError;
+        
+        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
         console.warn(
-          `Pollinations download attempt ${attempt}/${maxAttempts} failed:`,
-          fetchError instanceof Error ? fetchError.message : String(fetchError),
+          `❌ Pollinations download attempt ${attempt}/${maxAttempts} failed:`,
+          errorMessage,
         );
 
-        // Longer backoff between retries
+        // Exponential backoff between retries
         if (attempt < maxAttempts) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * attempt),
-          );
+          const backoffTime = Math.min(2000 * Math.pow(2, attempt - 1), 10000);
+          console.log(`⏳ Waiting ${backoffTime}ms before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, backoffTime));
         }
       }
     }
@@ -76,7 +90,7 @@ export async function generateImageAction(
         ? lastError.message
         : "Failed to download image from Pollinations AI";
       
-      console.error(`❌ All ${maxAttempts} attempts failed:`, errorMessage);
+      console.error(`💥 All ${maxAttempts} attempts failed:`, errorMessage);
       
       // Return a graceful error instead of throwing
       return {

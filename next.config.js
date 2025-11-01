@@ -10,7 +10,7 @@ if (!process.env.SKIP_ENV_VALIDATION) {
 /** @type {import("next").NextConfig} */
 const config = {
   output: "standalone",
-  images: {
+    images: {
     remotePatterns: [
       {
         protocol: "https",
@@ -23,6 +23,10 @@ const config = {
       {
         protocol: "https",
         hostname: "*.ufs.sh",
+      },
+      {
+        protocol: "https",
+        hostname: "image.pollinations.ai",
       },
     ],
   },

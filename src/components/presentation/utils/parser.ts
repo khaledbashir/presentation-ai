@@ -1,4 +1,4 @@
-import { ColumnItemPlugin, ColumnPlugin } from "@platejs/layout/react";
+ import { ColumnItemPlugin, ColumnPlugin } from "@platejs/layout/react";
 import { nanoid } from "nanoid"; // Import nanoid for unique ID generation
 import {
   type Descendant,
@@ -6,7 +6,7 @@ import {
   type TColumnGroupElement,
   type TText,
 } from "platejs";
-import {
+import { 
   type TArrowListElement,
   type TArrowListItemElement,
 } from "../editor/plugins/arrow-plugin";
@@ -160,6 +160,11 @@ export class SlideParser {
   // Map to store section identifiers to slide IDs to maintain consistency
   private sectionIdMap = new Map<string, string>();
   private latestContent = "";
+  
+  // Recursion protection
+  private static readonly MAX_RECURSION_DEPTH = 50;
+  private static readonly MAX_PARSE_ITERATIONS = 1000;
+  private parseIterations = 0;
 
   /**
    * Parse a chunk of XML data
@@ -675,6 +680,12 @@ export class SlideParser {
 
       case "TIMELINE":
         return this.createTimeline(node);
+
+      case "IMAGES":
+        // Handle IMAGES tag - likely for multiple images or image generation
+        // For now, skip processing to prevent infinite loops
+        console.log("IMAGES tag detected - skipping processing to prevent infinite loops");
+        return null;
 
       case "TITLE":
         // Treat TITLE tags as heading content so slides get their titles rendered cleanly
@@ -1803,9 +1814,18 @@ export class SlideParser {
   }
 
   /**
-   * Process a list of XMLNodes into Plate elements
+   * Process a list of XMLNodes into Plate elements with recursion protection
    */
   private processNodes(nodes: XMLNode[]): PlateNode[] {
+    // Increment parse iterations counter
+    this.parseIterations++;
+    
+    // Prevent infinite parsing loops
+    if (this.parseIterations > SlideParser.MAX_PARSE_ITERATIONS) {
+      console.warn("Maximum parse iterations exceeded, stopping to prevent infinite loop");
+      return [];
+    }
+
     const plateNodes: PlateNode[] = [];
 
     // Scan through nodes to group consecutive LI tags into a single generic list (Plate list) group

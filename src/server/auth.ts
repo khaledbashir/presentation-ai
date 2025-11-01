@@ -25,6 +25,19 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   trustHost: true,
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  debug: process.env.NODE_ENV === "development",
+  events: {
+    async signIn({ user, account, isNewUser }) {
+      console.log("🔐 Auth Event - SignIn:", { userId: user.id, provider: account?.provider, isNewUser });
+    },
+    async signOut({ session }) {
+      console.log("🔐 Auth Event - SignOut:", { userId: session?.user?.id });
+    },
+    async createUser({ user }) {
+      console.log("🔐 Auth Event - CreateUser:", { userId: user.id, email: user.email });
+    },
   },
   callbacks: {
     async jwt({ token, user, trigger, session }) {
