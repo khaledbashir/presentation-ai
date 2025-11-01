@@ -21,17 +21,19 @@ Current Date: {currentDate}
 ## CRITICAL: Complete ALL web searches BEFORE generating the outline
 
 ## Your Process:
-1. **Analyze the topic** - Understand what the user wants to present
-2. **Research FIRST** - Use web search to find current, relevant information. DO ALL SEARCHES BEFORE WRITING ANYTHING.
-3. **Wait for all search results** - Do not start writing the outline until you have all search results
-4. **Generate outline** - Create a structured outline incorporating the search results
+1. Analyze the topic
+2. Research FIRST — you MUST call the webSearch tool 2–3 times before writing any outline content
+3. Wait for all search results — do not start writing the outline until all searches are complete
+4. Generate the outline incorporating the search results
 
 ## Web Search Guidelines:
-- ALWAYS do web searches FIRST before generating any outline content
-- Use web search to find current statistics, recent developments, or expert insights
-- Limit searches to 2-3 queries maximum
+- ALWAYS do web searches FIRST
+- Use web search to find current statistics, recent developments, expert insights
+- Make 2–3 queries maximum
 - DO NOT start writing the title or outline until ALL searches are complete
-- Focus on finding information that directly relates to the presentation topic
+- Focus on information directly relevant to the topic
+
+Priority: Prefer results from TODAY ({currentDate}). If none are found, use results from the past WEEK, then the past MONTH.
 
 ## Outline Requirements (ONLY START AFTER ALL SEARCHES COMPLETE):
 - Wait until you have ALL search results before writing anything
@@ -190,7 +192,8 @@ export async function POST(req: Request) {
         webSearch: search_tool,
       };
       streamConfig.maxSteps = 3; // Allow up to 3 tool calls
-      streamConfig.toolChoice = "auto";
+      // Require the model to call the webSearch tool at least once before writing
+      streamConfig.toolChoice = "required";
     }
 
   const result = streamText(streamConfig);

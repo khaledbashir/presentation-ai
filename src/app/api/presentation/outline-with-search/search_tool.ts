@@ -28,25 +28,55 @@ export const search_tool: Tool = {
       }
       
       // Add timeout to prevent hanging
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Search timeout after 15 seconds')), 15000)
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Search timeout after 15 seconds")), 15000),
       );
-      
-      const searchPromise = tavilyService.search(query, { 
-        max_results: 3,
-        search_depth: "basic",
-        include_answer: false,
-        include_raw_content: false
-      });
-      
-      const response = await Promise.race([searchPromise, timeoutPromise]);
-      console.log("✅ Search completed for query:", query);
-      console.log("📊 Search results count:", (response as any)?.results?.length || 0);
+
+      // Prefer today's results, then week, then month
+      const ranges: Array<{ label: string; value: "d" | "w" | "m" }> = [
+        { label: "today", value: "d" },
+        { label: "week", value: "w" },
+        { label: "month", value: "m" },
+      ];
+
+      let chosen: any = null;
+      let usedRange: "d" | "w" | "m" | null = null;
+
+      for (const r of ranges) {
+        try {
+          console.log(`🗓️ Searching (${r.label}) for query:`, query);
+          const searchPromise = tavilyService.search(query, {
+            max_results: 3,
+            search_depth: "basic",
+            include_answer: false,
+            include_raw_content: false,
+            // Tavily time filter: d = day, w = week, m = month, y = year
+            time_range: r.value as any,
+          } as any);
+
+          const response = (await Promise.race([searchPromise, timeoutPromise])) as any;
+          const count = response?.results?.length || 0;
+          console.log(`✅ Search (${r.label}) completed. Results:`, count);
+          if (count > 0) {
+            chosen = response;
+            usedRange = r.value;
+            break;
+          }
+          // keep last empty response for reporting if all empty
+          chosen = response;
+          usedRange = r.value;
+        } catch (e) {
+          console.warn(`⚠️ Search (${r.label}) failed:`, e instanceof Error ? e.message : String(e));
+          // try next range
+        }
+      }
+
       return JSON.stringify({
-        ...response,
+        ...(chosen || {}),
         query,
         success: true,
-        fallback: false
+        fallback: false,
+        used_time_range: usedRange,
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
