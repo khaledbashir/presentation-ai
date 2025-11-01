@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     });
 
     if (!openrouterResponse.ok) {
-      console.error("OpenRouter API error:", openrouter.statusText);
+      console.error("OpenRouter API error:", openrouterResponse.statusText);
       return NextResponse.json(
         { error: "OpenRouter API error" },
         { status: 500 }
