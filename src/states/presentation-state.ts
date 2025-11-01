@@ -146,8 +146,9 @@ export const usePresentationState = create<PresentationState>((set) => ({
   imageSource: "stock",
   stockImageProvider: "unsplash",
   presentationStyle: "professional",
-  modelProvider: "openai",
-  modelId: "llama3.1:8b",
+  // Default to a robust OpenRouter model that supports tools and streams well
+  modelProvider: "openrouter",
+  modelId: "openai/gpt-4o-mini",
   slides: [], // Now holds the new slide object structure
   outlineThinking: "",
   presentationThinking: "",

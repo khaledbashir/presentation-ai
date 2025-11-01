@@ -111,25 +111,52 @@ export async function POST(req: Request) {
       prompt: prompt.substring(0, 50) + "...",
     });
 
-    // Create model based on selection
-    const model = modelPicker(modelProvider, modelId);
-
-    // Check if provider/model supports tool calling well
-    // Some providers and specific models have issues with tool calling
-    const incompatibleModel =
+    // Requested model/provider compatibility assessment
+    const requestedIncompatibleModel =
       modelId?.includes("minimax") ||
       modelId?.includes("pollinations") ||
-      // Many OpenRouter "gpt-oss" variants and "exacto" models don't support tools reliably
       modelId?.includes("gpt-oss") ||
-      modelId?.includes(":exacto");
-    const incompatibleProvider = ["pollinations"].includes(modelProvider || "");
-    const supportsTools = !incompatibleProvider && !incompatibleModel;
+      modelId?.includes(":exacto") ||
+      false;
+    const requestedIncompatibleProvider = ["pollinations"].includes(
+      modelProvider || "",
+    );
+
+    // Model/tool compatibility guard + fallbacks
+    let finalProvider = modelProvider || "openrouter";
+    let finalModelId = modelId;
+
+    if (!finalModelId || requestedIncompatibleModel || requestedIncompatibleProvider) {
+      finalProvider = "openrouter";
+      finalModelId = "openai/gpt-4o-mini";
+      console.log("🔁 Selecting fallback model for outline with search:", {
+        requestedProvider: modelProvider,
+        requestedModel: modelId,
+        chosenProvider: finalProvider,
+        chosenModel: finalModelId,
+      });
+    }
+
+    // Check if final provider/model supports tool calling well
+    const finalIncompatibleModel =
+      finalModelId?.includes("minimax") ||
+      finalModelId?.includes("pollinations") ||
+      finalModelId?.includes("gpt-oss") ||
+      finalModelId?.includes(":exacto") ||
+      false;
+    const finalIncompatibleProvider = ["pollinations"].includes(
+      finalProvider || "",
+    );
+    const supportsTools = !finalIncompatibleProvider && !finalIncompatibleModel;
+
+    // Create model based on (possibly adjusted) selection
+    const model = modelPicker(finalProvider, finalModelId);
 
     if (!supportsTools) {
       console.log("⚠️  Model/provider doesn't support tool calling reliably:", {
-        provider: modelProvider,
-        model: modelId,
-        reason: incompatibleModel ? "model incompatible" : "provider incompatible"
+        provider: finalProvider,
+        model: finalModelId,
+        reason: finalIncompatibleModel ? "model incompatible" : "provider incompatible"
       });
       console.log("📝 Falling back to outline without web search");
     }
@@ -139,8 +166,8 @@ export async function POST(req: Request) {
       hasTavilyKey: !!env.TAVILY_API_KEY,
       tavilyKeyPrefix: env.TAVILY_API_KEY ? env.TAVILY_API_KEY.substring(0, 10) + "..." : "none",
       supportsTools,
-      modelProvider,
-      modelId
+      modelProvider: finalProvider,
+      modelId: finalModelId
     });
 
     const streamConfig: Parameters<typeof streamText>[0] = {

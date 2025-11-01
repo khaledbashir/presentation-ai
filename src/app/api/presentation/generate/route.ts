@@ -1,4 +1,5 @@
 import { modelPicker } from "@/lib/model-picker";
+export const dynamic = "force-dynamic";
 import { auth } from "@/server/auth";
 import { streamText } from "ai";
 import { NextResponse } from "next/server";
@@ -292,7 +293,10 @@ export async function POST(req: Request) {
       day: "numeric",
     });
 
-    const model = modelPicker(modelProvider, modelId);
+  // Prefer stable defaults when the selection is obviously invalid
+  const finalProvider = modelProvider || "openrouter";
+  const finalModelId = modelId || "openai/gpt-4o-mini";
+  const model = modelPicker(finalProvider, finalModelId);
 
     // Format the prompt with template variables
     const formattedPrompt = slidesTemplate
